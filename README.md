@@ -1,6 +1,8 @@
 # Poison Prince
 
-There is nothing more frustrating than obtaining a remote code execution on a PHP webapp and being constrained by `disable_functions`... This shell tries to offer useful features for post-exploitation, **_while no exec-like functions are allowed_**
+There is nothing more frustrating than obtaining a remote code execution on a PHP webapp and being constrained by `disable_functions` while performing an intrusion test... This shell tries to offer useful features for post-exploitation, **_while no exec-like functions are allowed_**.
+
+This shell is protected by a password, and because of lack of imagination, default credentials are `poisonprince:poisonprince`. You may want to change it before uploading the shell, because leaving it unprotected on a server is a security hole. This shell is meant to evaluate the strength of an already hardened server (but maybe not sufficiently). **Use it with caution. Do no harm.**
 
 So of course features are quite limited and may be broken if `disable_functions` forbids the use of too much routines, and `open_basedir` cannot be bypassed.
 
@@ -8,7 +10,7 @@ Let's render upon to Ceasar with is Ceasar's: the layout and some features come 
 
 :construction:
 
-Work in progress ... I try to add new bypass techniques and commands on a regular basis. Still, the shell may misbehave if some functions it uses are also disabled, although they are not exec-like
+Work in progress ... I try to add new bypass techniques and commands on a regular basis. Still, the shell may misbehave if some functions it uses are also disabled, although they are not exec-like. For the moment, Windows servers are not supported.
 
 ## Manual
 
@@ -155,9 +157,9 @@ Usage: `upload <name>`
 ## Future work
 
 * Better handling of quoted values
-* Password protection
 * More commands
 * if `grep` or `getpasswd` has a line matching multiples needles, display it only once
+* Make it windows-compatible
 * (maybe) automatically try to verify if no-exec bypass work, if possible
 
 ## Why Poison Prince ?
