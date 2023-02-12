@@ -2062,7 +2062,7 @@ if (isset($_GET["feature"])) {
  |_|                           |_|                                                                    <span></span>
                 </div>
                 <div id="shell-sub">
-A restricted PHP webshell based on poisonprince@shell - Testeur de stylos<span></span>
+A restricted PHP webshell based on p0wny@shell - Testeur de stylos<span></span>
                 </div>
             </pre>
             <div id="shell-input">
