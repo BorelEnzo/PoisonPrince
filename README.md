@@ -12,6 +12,7 @@ Let's render upon to Ceasar with is Ceasar's: the layout and some features come 
 
 Work in progress ... I try to add new bypass techniques and commands on a regular basis. Still, the shell may misbehave if some functions it uses are also disabled, although they are not exec-like. For the moment, Windows servers are not supported.
 
+![poisonprince](img/poisonprince.png)
 ## Manual
 
 To begin with, press `?` or `help` or nothing to get help.
@@ -158,9 +159,13 @@ Usage: `upload <name>`
 
 * Better handling of quoted values
 * More commands
-* if `grep` or `getpasswd` has a line matching multiples needles, display it only once
+* offer ways to bypass disabled functions like file_get_contents, cuz the shell heavily relies on it
 * Make it windows-compatible
 * (maybe) automatically try to verify if no-exec bypass work, if possible
+
+## Customise PoisonPrince
+
+The `define` directives may be tweaked to look for more interesting files.
 
 ## Why Poison Prince ?
 

