@@ -927,7 +927,7 @@ function doChkbypass(string $cmdline):string{
       $msg = "- <span style='color:red;'>putenv</span> is enabled and can be used to corrupt environment variables, such as LD_PRELOAD. This can be used with the following routines: <span style='font-style:italic;color:blue;'>".implode("</span>, <span style='font-style:italic;color:blue;'>", $tmp1)."</span>.\n";
       $msg .= "\tFirst compile the following C snippet as a shared library (example.so):\n<span style='font-style:italic;color:blue;'>
 \t#define  _GNU_SOURCE
-\t#include <stdlib.h>
+\t#include &lt;stdlib.h&gt;
 
 \t__attribute__ ((__constructor__)) void preloadme(void) {
 \t\tunsetenv(\"LD_PRELOAD\");

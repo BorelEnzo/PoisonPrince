@@ -1,6 +1,6 @@
 # Poison Prince
 
-There is nothing more frustrating than obtaining a remote code execution on a PHP webapp and being constrained by `disable_functions` while performing an intrusion test... This shell tries to offer useful features for post-exploitation, **_while no exec-like functions are allowed_**.
+There is nothing more frustrating than obtaining a remote code execution on a PHP webapp and being constrained by `disable_functions` while performing an intrusion test... This shell tries to offer useful features for post-exploitation, **_while no exec-like function is allowed_**.
 
 This shell is protected by a password, and because of lack of imagination, default credentials are `poisonprince:poisonprince`. You may want to change it before uploading the shell, because leaving it unprotected on a server is a security hole. This shell is meant to evaluate the strength of an already hardened server (but maybe not sufficiently). **Use it with caution. Do no harm.**
 
@@ -95,7 +95,7 @@ Can be quite slow if the given folder is huge. Prints it like a grep
 ![getpasswd](img/getpasswd.png)
 ### `grep`
 
-Looks for a given string, in a given folder (recursively) or file. If the switch `-i` is set, it ignores the case. If the paht is not set, if assumes the current folder\
+Looks for a given string, in a given folder (recursively) or file. If the switch `-i` is set, it ignores the case. If the path is not set, if assumes the current folder\
 Usage: `grep <pattern> <path?> <-i?>`
 
 Can be quite slow if the given folder is huge. Prints it like a grep
@@ -113,7 +113,7 @@ Usage: `ls <-R?> <path?>`
 ![ls](img/ls.png)
 ### `mkdir`
 
-Creates a directory. IT creates intermediate ones if the don't exist\
+Creates a directory. It creates intermediate ones if they don't exist\
 Usage: `mkdir <name>`
 
 ### `mv`
@@ -121,7 +121,7 @@ Usage: `mkdir <name>`
 Renames a file/folder\
 Usage: `mv <name> <newname>`
 
-Quotes can be used, but once again, not sure that they are properly handler. And who the hell uses blank spaces in file names ?!
+Quotes can be used, but once again, not sure that they are properly handled. And who the hell uses blank spaces in file names ?!
 
 ### `phpinfo`
 
@@ -131,7 +131,7 @@ Usage: `phpinfo`
 ![phpinfo](img/phpinfo.png)
 ### `ps`
 
-Only works in `/proc` is readable. Lists the running processes\
+Only works if `/proc` is readable. Lists the running processes\
 Usage: `ps`
 
 ![ps](img/ps.png)
@@ -142,7 +142,7 @@ Usage: `pwd`
 
 ### `rm`
 
-Beware of this one, a folder could be unintentionally removed ... Removes a file or a folder. If this a folder is deletes recursively\
+Beware of this one, a folder could be unintentionally removed ... Removes a file or a folder. If this is a folder, it deletes recursively\
 Usage: `rm <path>`
 
 ### `tar`
